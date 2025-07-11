@@ -440,20 +440,22 @@ def _start_new_round(room_id):
         drawer_order = room_data['game_state']['drawer_order']
         drawer_index = room_data['game_state']['current_drawer_index']
         
+        # Ensure we have a valid drawer
         if drawer_index >= len(drawer_order):
-            # Reset to first player and increment round
-            drawer_index = 0
-            room_data['game_state']['current_round'] += 1
-            room_data['game_state']['current_drawer_index'] = 0
-            
-            # Check again if game should end
-            if room_data['game_state']['current_round'] > max_rounds:
-                _end_game(room_id)
-                return
+            print(f"❌ Invalid drawer index {drawer_index} for drawer order length {len(drawer_order)}")
+            _end_game(room_id)
+            return
         
         current_drawer = drawer_order[drawer_index]
         room_data['game_state']['current_drawer'] = current_drawer
-        room_data['game_state']['current_drawer_index'] = drawer_index + 1
+        
+        # Reset turn-specific state for new turn
+        room_data['game_state']['current_word'] = None
+        room_data['game_state']['players_guessed'] = []
+        room_data['game_state']['turn_start_time'] = None
+        
+        # Don't increment drawer_index here - that should happen in _start_next_turn_or_round
+        # when the turn actually ends
         
         memory_service.update_room(room_id, room_data)
         
@@ -462,7 +464,7 @@ def _start_new_round(room_id):
         
         # Notify all players
         socketio.emit('round_started', {
-            'round': room_data['game_state']['current_round'],
+            'round': current_round,
             'drawer': current_drawer,
             'drawer_name': memory_service.get_user_session(current_drawer)['username'],
             'total_rounds': max_rounds
@@ -527,19 +529,19 @@ def _start_drawing_phase(room_id):
         room_data['game_state']['turn_start_time'] = time.time()
         memory_service.update_room(room_id, room_data)
         
-        # NOTE: Drawer already received word_selected event, no need to send drawing_started to them
-        # Only notify other players that drawing has started (they see word hint)
+        # Send drawing_started to all players in room (frontend will handle filtering)
         word_hint = '_' * len(current_word.replace(' ', ''))
-        for session_id, user_info in authenticated_sockets.items():
-            if user_info['user_id'] in room_data['players'] and user_info['user_id'] != drawer_id:
-                socketio.emit('drawing_started', {
-                    'drawer_id': drawer_id,
-                    'drawer_name': memory_service.get_user_session(drawer_id)['username'],
-                    'word_hint': word_hint,
-                    'word_length': len(current_word),
-                    'time_limit': draw_time,
-                    'phase': 'drawing'
-                }, room=session_id)
+        
+        print(f"🎨 Broadcasting drawing_started for room {room_id}")
+        
+        socketio.emit('drawing_started', {
+            'drawer_id': drawer_id,
+            'drawer_name': memory_service.get_user_session(drawer_id)['username'],
+            'word_hint': word_hint,
+            'word_length': len(current_word),
+            'time_limit': draw_time,
+            'phase': 'drawing'
+        }, room=room_id)
         
         # Start drawing timer
         def on_drawing_timeout():
@@ -559,16 +561,15 @@ def _start_drawing_phase(room_id):
                     # Generate progressive hint
                     progressive_hint = word_service.get_progressive_hint(current_word, elapsed_time)
                     
-                    # Send hint update to non-drawers
-                    for session_id, user_info in authenticated_sockets.items():
-                        if user_info['user_id'] in room_data['players'] and user_info['user_id'] != drawer_id:
-                            # Only send to players who haven't guessed correctly yet
-                            if user_info['user_id'] not in room_data['game_state'].get('players_guessed', []):
-                                socketio.emit('hint_update', {
-                                    'word_hint': progressive_hint,
-                                    'word_length': len(current_word),
-                                    'elapsed_time': elapsed_time
-                                }, room=session_id)
+                    print(f"🔍 Sending progressive hint: '{progressive_hint}' after {elapsed_time:.1f}s")
+                    
+                    # Send hint update to the room (frontend will filter for non-drawers)
+                    socketio.emit('hint_update', {
+                        'word_hint': progressive_hint,
+                        'word_length': len(current_word),
+                        'elapsed_time': elapsed_time,
+                        'drawer_id': drawer_id  # Frontend uses this to filter
+                    }, room=room_id)
                     
                     # Schedule next hint update if game is still ongoing
                     if elapsed_time + 10 < draw_time:
@@ -644,18 +645,26 @@ def _start_next_turn_or_round(room_id):
         if not room_data:
             return
         
-        # Check if round is complete (all players had a turn)
+        # Increment the drawer index since the current turn is complete
         drawer_order = room_data['game_state']['drawer_order']
         current_index = room_data['game_state']['current_drawer_index']
+        next_index = current_index + 1
         
-        if current_index >= len(drawer_order):
+        print(f"🎮 Next turn/round: current_index={current_index}, next_index={next_index}, drawer_order_length={len(drawer_order)}")
+        
+        if next_index >= len(drawer_order):
             # Round complete, start next round
-            room_data['game_state']['current_round'] += 1
-            room_data['game_state']['current_drawer_index'] = 0
+            current_round = room_data['game_state']['current_round']
+            next_round = current_round + 1
+            
+            print(f"🎮 Round {current_round} complete, starting round {next_round}")
+            
+            room_data['game_state']['current_round'] = next_round
+            room_data['game_state']['current_drawer_index'] = 0  # Reset to first player
             memory_service.update_room(room_id, room_data)
             
             # Check if game should end
-            if room_data['game_state']['current_round'] > room_data['settings']['rounds']:
+            if next_round > room_data['settings']['rounds']:
                 _end_game(room_id)
                 return
             
@@ -664,13 +673,17 @@ def _start_next_turn_or_round(room_id):
             
             # Start intermission before next round
             socketio.emit('round_complete', {
-                'next_round': room_data['game_state']['current_round'],
+                'next_round': next_round,
                 'intermission_time': 3
             }, room=room_id)
             
             timer_service.start_intermission_timer(room_id, 3)
         else:
             # Continue with next turn in same round
+            room_data['game_state']['current_drawer_index'] = next_index
+            memory_service.update_room(room_id, room_data)
+            
+            print(f"🎮 Starting next turn in same round, drawer_index now {next_index}")
             _start_new_round(room_id)
         
     except Exception as e:
