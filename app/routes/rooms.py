@@ -13,15 +13,29 @@ def generate_room_id():
 @rooms_bp.route('/create', methods=['POST'])
 def create_room():
     """Create a new game room"""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("=== CREATE ROOM REQUEST ===")
+    
     try:
+        logger.info(f"Request headers: {dict(request.headers)}")
+        logger.info(f"Request origin: {request.headers.get('Origin')}")
+        logger.info(f"Session data: {dict(session)}")
+        
         # Check if user is authenticated
         user_id = session.get('user_id')
+        logger.info(f"User ID from session: {user_id}")
+        
         if not user_id:
-            return jsonify({'error': 'Authentication required'}), 401
+            logger.warning("No user ID in session - user not authenticated")
+            return jsonify({'error': 'Authentication required. Please create a username first.'}), 401
         
         user_data = memory_service.get_user_session(user_id)
+        logger.info(f"User data from memory: {user_data}")
+        
         if not user_data:
-            return jsonify({'error': 'Invalid session'}), 401
+            logger.warning(f"No user data found for user ID {user_id} - session expired or invalid")
+            return jsonify({'error': 'Your session has expired. Please create a username again.'}), 401
         
         data = request.get_json() or {}
         

@@ -113,9 +113,20 @@ def validate_username():
     try:
         logger.info(f"Request method: {request.method}")
         logger.info(f"Request content type: {request.content_type}")
+        logger.info(f"Request headers: {dict(request.headers)}")
+        logger.info(f"Request origin: {request.headers.get('Origin')}")
+        
+        # Check if request has valid JSON data
+        if not request.is_json:
+            logger.warning("Request is not JSON")
+            return jsonify({'valid': False, 'error': 'Content-Type must be application/json'}), 400
         
         data = request.get_json()
         logger.info(f"Request data: {data}")
+        
+        if not data:
+            logger.warning("Request data is None or empty")
+            return jsonify({'valid': False, 'error': 'Request body is required'}), 400
         
         username = data.get('username', '').strip() if data else ''
         logger.info(f"Username to validate: '{username}'")
@@ -144,7 +155,7 @@ def validate_username():
         
     except Exception as e:
         logger.error(f"Exception in validate_username: {str(e)}", exc_info=True)
-        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+        return jsonify({'valid': False, 'error': f'Internal server error: {str(e)}'}), 500
 
 @auth_bp.route('/socket-test', methods=['GET'])
 def socket_test():
