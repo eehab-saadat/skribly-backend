@@ -29,19 +29,19 @@ def create_app(config_name=None):
     logger.info(f"📋 App config loaded: SECRET_KEY={'set' if app.config.get('SECRET_KEY') else 'NOT SET'}")
     logger.info(f"📋 Debug mode: {app.config.get('DEBUG', False)}")
     
-    # Configure CORS with specific origins for credentials support
+    # Configure CORS to allow all origins
     logger.info("🌐 Configuring CORS...")
     CORS(app, 
-         origins=['http://localhost:3000', 'http://127.0.0.1:3000'],  # Specific origins for credentials
-         supports_credentials=True,
+         origins='*',  # Allow all origins
+         supports_credentials=False,  # Disable credentials for security with wildcard origins
          allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
     logger.info("✅ CORS configured successfully")
     
-    # Configure SocketIO with specific origins for credentials support
+    # Configure SocketIO to allow all origins
     logger.info("🔌 Configuring SocketIO...")
     socketio.init_app(app, 
-                     cors_allowed_origins=['http://localhost:3000', 'http://127.0.0.1:3000'],  # Specific origins for credentials
+                     cors_allowed_origins='*',  # Allow all origins
                      async_mode=app.config.get('SOCKETIO_ASYNC_MODE', 'threading'),
                      logger=False,  # Disable verbose logging
                      engineio_logger=False,
@@ -96,17 +96,11 @@ def create_app(config_name=None):
     def after_request(response):
         logger.info(f"📡 {request.method} {request.path} -> {response.status_code}")
         
-        # Get the origin from the request
-        origin = request.headers.get('Origin')
-        allowed_origins = ['http://localhost:3000', 'http://127.0.0.1:3000']
-        
-        # Set specific origin if it's in our allowed list
-        if origin in allowed_origins:
-            response.headers.add('Access-Control-Allow-Origin', origin)
-        
+        # Allow all origins
+        response.headers.add('Access-Control-Allow-Origin', '*')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
         response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        # Note: Access-Control-Allow-Credentials cannot be 'true' when origin is '*'
         return response
     
     return app 
