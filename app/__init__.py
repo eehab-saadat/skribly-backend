@@ -31,18 +31,34 @@ def create_app(config_name=None):
     
     # Configure CORS to allow all origins
     logger.info("🌐 Configuring CORS...")
+    
+    # Get allowed origins from environment or use defaults
+    allowed_origins = [
+        'http://localhost:3000',                          # Local development
+        'http://127.0.0.1:3000',                         # Local development
+        'https://skribly.netlify.app',                   # Production frontend
+        'https://eehabsaadat.pythonanywhere.com',        # Production backend (for health checks)
+        'https://app.netlify.com',                       # Netlify preview builds
+    ]
+    
+    # Add any additional origins from environment
+    env_origins = os.environ.get('CORS_ORIGINS', '')
+    if env_origins:
+        additional_origins = [origin.strip() for origin in env_origins.split(',')]
+        allowed_origins.extend(additional_origins)
+    
     CORS(app, 
-         origins='*',  # Allow all origins
-         supports_credentials=False,  # Disable credentials for security with wildcard origins
+         origins=allowed_origins,         # Use specific origins instead of wildcard
+         supports_credentials=True,       # Enable credentials with specific origins
          allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
-    logger.info("✅ CORS configured successfully")
+    logger.info(f"✅ CORS configured successfully with origins: {allowed_origins}")
     
-    # Configure SocketIO to allow all origins
+    # Configure SocketIO to allow specific origins
     logger.info("🔌 Configuring SocketIO...")
     socketio.init_app(app, 
-                     cors_allowed_origins='*',  # Allow all origins
-                     cors_credentials=False,    # Disable credentials for wildcard origins
+                     cors_allowed_origins=allowed_origins,  # Use specific origins
+                     cors_credentials=True,                 # Enable credentials with specific origins
                      async_mode=app.config.get('SOCKETIO_ASYNC_MODE', 'threading'),
                      logger=False,  # Disable verbose logging
                      engineio_logger=False,
@@ -99,11 +115,21 @@ def create_app(config_name=None):
     def after_request(response):
         logger.info(f"📡 {request.method} {request.path} -> {response.status_code}")
         
-        # Allow all origins
-        response.headers.add('Access-Control-Allow-Origin', '*')
+        # Get the origin of the request
+        origin = request.headers.get('Origin')
+        logger.info(f"🌐 Request origin: {origin}")
+        
+        # Check if the origin is in our allowed list
+        if origin in allowed_origins:
+            response.headers.add('Access-Control-Allow-Origin', origin)
+            response.headers.add('Access-Control-Allow-Credentials', 'true')
+            logger.info(f"✅ CORS allowed for origin: {origin}")
+        else:
+            logger.warning(f"❌ CORS blocked for origin: {origin}")
+            logger.info(f"🔍 Allowed origins: {allowed_origins}")
+        
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
         response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        # Note: Access-Control-Allow-Credentials cannot be 'true' when origin is '*'
         return response
     
     return app 
