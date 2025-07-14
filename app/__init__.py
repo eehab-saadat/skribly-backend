@@ -42,13 +42,16 @@ def create_app(config_name=None):
     logger.info("🔌 Configuring SocketIO...")
     socketio.init_app(app, 
                      cors_allowed_origins='*',  # Allow all origins
+                     cors_credentials=False,    # Disable credentials for wildcard origins
                      async_mode=app.config.get('SOCKETIO_ASYNC_MODE', 'threading'),
                      logger=False,  # Disable verbose logging
                      engineio_logger=False,
                      ping_timeout=60,
                      ping_interval=25,
                      transports=['polling', 'websocket'],
-                     manage_session=False)  # Use Flask's session management
+                     manage_session=False,  # Use Flask's session management
+                     allow_upgrades=True,   # Allow WebSocket upgrades
+                     cookie=None)           # Disable cookies for CORS compatibility
     logger.info("✅ SocketIO configured successfully")
     
     # Register blueprints
