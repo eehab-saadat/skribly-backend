@@ -60,13 +60,13 @@ def create_app(config_name=None):
                      cors_allowed_origins=allowed_origins,  # Use specific origins
                      cors_credentials=True,                 # Enable credentials with specific origins
                      async_mode=app.config.get('SOCKETIO_ASYNC_MODE', 'threading'),
-                     logger=False,  # Disable verbose logging
-                     engineio_logger=False,
-                     ping_timeout=60,
-                     ping_interval=25,
-                     transports=['polling', 'websocket'],
+                     logger=True,   # Enable logging for debugging
+                     engineio_logger=True,  # Enable engine.io logging
+                     ping_timeout=120,      # Increase timeout for PythonAnywhere
+                     ping_interval=60,      # Increase ping interval
+                     transports=['polling'], # Only use polling for PythonAnywhere
                      manage_session=False,  # Use Flask's session management
-                     allow_upgrades=True,   # Allow WebSocket upgrades
+                     allow_upgrades=False,  # Disable WebSocket upgrades for PythonAnywhere
                      cookie=None)           # Disable cookies for CORS compatibility
     logger.info("✅ SocketIO configured successfully")
     
