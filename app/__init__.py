@@ -26,8 +26,15 @@ def create_app(config_name=None):
     app = Flask(__name__)
     app.config.from_object(config[config_name])
     
+    # Configure session settings for cross-origin requests
+    app.config['SESSION_COOKIE_SECURE'] = config_name == 'production'  # Only HTTPS in production
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None' if config_name == 'production' else 'Lax'
+    app.config['SESSION_COOKIE_DOMAIN'] = None  # Allow subdomain sharing
+    
     logger.info(f"📋 App config loaded: SECRET_KEY={'set' if app.config.get('SECRET_KEY') else 'NOT SET'}")
     logger.info(f"📋 Debug mode: {app.config.get('DEBUG', False)}")
+    logger.info(f"📋 Session cookie settings: secure={app.config['SESSION_COOKIE_SECURE']}, samesite={app.config['SESSION_COOKIE_SAMESITE']}")
     
     # Configure CORS to allow all origins
     logger.info("🌐 Configuring CORS...")
