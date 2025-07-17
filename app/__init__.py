@@ -105,6 +105,11 @@ def create_app(config_name=None):
     timer_service.init_app(app)
     logger.info("✅ Timer service initialized successfully")
     
+    logger.info("🏓 Initializing self-ping service...")
+    from app.services.selfping_service import selfping_service
+    selfping_service.init_app(app)
+    logger.info("✅ Self-ping service initialized successfully")
+    
     @app.route('/health')
     def health_check():
         from flask import jsonify
