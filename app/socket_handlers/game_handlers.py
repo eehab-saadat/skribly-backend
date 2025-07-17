@@ -6,6 +6,7 @@ from app.services.word_service import word_service
 from app.services.timer_service import timer_service
 from app.socket_handlers import room_handlers
 from app.socket_handlers.room_handlers import authenticated_sockets
+from app.config import GameConfig
 import random
 import time
 import threading
@@ -50,8 +51,8 @@ def handle_start_game(data):
             return
         
         # Check if enough players
-        if len(room_data['players']) < 2:
-            emit('error', {'message': 'Need at least 2 players to start'})
+        if len(room_data['players']) < GameConfig.MIN_PLAYERS:
+            emit('error', {'message': f'Need at least {GameConfig.MIN_PLAYERS} players to start'})
             return
         
         # Check if game is already running

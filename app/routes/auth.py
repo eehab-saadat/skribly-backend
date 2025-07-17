@@ -1,7 +1,7 @@
 import uuid
 import logging
 from datetime import datetime
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, make_response
 from app.services.memory_service import memory_service
 
 # Configure logger
@@ -61,7 +61,28 @@ def create_session():
         }
         logger.info(f"Returning response: {response_data}")
         
-        return jsonify(response_data), 201
+        # Create response and explicitly set session cookie
+        response = make_response(jsonify(response_data))
+        
+        # Set custom session cookie with cross-origin settings
+        origin = request.headers.get('Origin')
+        logger.info(f"Setting cookie for origin: {origin}")
+        
+        # For cross-origin requests, we can't use SameSite=None with Secure=False
+        # So we'll set a more permissive cookie
+        response.set_cookie(
+            'skribly_session_id',
+            session_id,
+            secure=False,  # Allow HTTP
+            httponly=False,  # Allow JS access
+            samesite='Lax',  # Best we can do for HTTP cross-origin
+            domain=None,  # Allow all domains
+            path='/'  # Available for all paths
+        )
+        
+        logger.info(f"Custom session cookie set: skribly_session_id={session_id}")
+        
+        return response, 201
         
     except Exception as e:
         logger.error(f"Exception in create_session: {str(e)}", exc_info=True)
@@ -70,10 +91,28 @@ def create_session():
 @auth_bp.route('/session', methods=['GET'])
 def get_session():
     """Get current user session"""
+    logger.info("=== GET SESSION REQUEST ===")
     try:
+        logger.info(f"Request headers: {dict(request.headers)}")
+        logger.info(f"Request cookies: {dict(request.cookies)}")
+        logger.info(f"Session data: {dict(session)}")
+        
+        # Check if user is authenticated (try multiple methods)
         session_id = session.get('user_id')
+        logger.info(f"User ID from Flask session: {session_id}")
+        
+        # If no session_id in Flask session, try custom cookie
+        if not session_id:
+            session_id = request.cookies.get('skribly_session_id')
+            logger.info(f"User ID from custom cookie: {session_id}")
+        
+        # If still no session_id, try custom header (for cross-origin compatibility)
+        if not session_id:
+            session_id = request.headers.get('X-Session-ID')
+            logger.info(f"User ID from custom header: {session_id}")
         
         if not session_id:
+            logger.warning("No session ID found in session, cookies, or headers")
             return jsonify({'error': 'No active session'}), 401
         
         user_data = memory_service.get_user_session(session_id)

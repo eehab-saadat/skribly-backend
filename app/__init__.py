@@ -2,7 +2,7 @@ import os
 import logging
 from flask import Flask, request, make_response
 from flask_socketio import SocketIO
-from flask_cors import CORS
+# from flask_cors import CORS  # Commented out - using manual CORS handling
 from app.config import config
 
 # Configure logging
@@ -27,45 +27,29 @@ def create_app(config_name=None):
     app.config.from_object(config[config_name])
     
     # Configure session settings for cross-origin requests
-    app.config['SESSION_COOKIE_SECURE'] = config_name == 'production'  # Only HTTPS in production
-    app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['SESSION_COOKIE_SAMESITE'] = 'None' if config_name == 'production' else 'Lax'
+    # For SameSite=None to work, Secure must be True, but we're on HTTP localhost
+    # So we'll use Lax and implement a different solution
+    app.config['SESSION_COOKIE_SECURE'] = False  # Allow HTTP in development
+    app.config['SESSION_COOKIE_HTTPONLY'] = False  # Allow JS access for debugging
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # More permissive for development
     app.config['SESSION_COOKIE_DOMAIN'] = None  # Allow subdomain sharing
     
     logger.info(f"📋 App config loaded: SECRET_KEY={'set' if app.config.get('SECRET_KEY') else 'NOT SET'}")
     logger.info(f"📋 Debug mode: {app.config.get('DEBUG', False)}")
     logger.info(f"📋 Session cookie settings: secure={app.config['SESSION_COOKIE_SECURE']}, samesite={app.config['SESSION_COOKIE_SAMESITE']}")
     
-    # Configure CORS to allow all origins
+    # Configure CORS to allow all origins with credentials
     logger.info("🌐 Configuring CORS...")
     
-    # Get allowed origins from environment or use defaults
-    allowed_origins = [
-        'http://localhost:3000',                          # Local development
-        'http://127.0.0.1:3000',                         # Local development
-        'https://skribly.netlify.app',                   # Production frontend
-        'https://eehabsaadat.pythonanywhere.com',        # Production backend (for health checks)
-        'https://app.netlify.com',                       # Netlify preview builds
-    ]
+    # Disable Flask-CORS and handle CORS manually for better control
+    # CORS(app, resources={r"/*": {"origins": "*"}})
+    logger.info(f"✅ CORS will be handled manually in after_request")
     
-    # Add any additional origins from environment
-    env_origins = os.environ.get('CORS_ORIGINS', '')
-    if env_origins:
-        additional_origins = [origin.strip() for origin in env_origins.split(',')]
-        allowed_origins.extend(additional_origins)
-    
-    CORS(app, 
-         origins=allowed_origins,         # Use specific origins instead of wildcard
-         supports_credentials=True,       # Enable credentials with specific origins
-         allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
-         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
-    logger.info(f"✅ CORS configured successfully with origins: {allowed_origins}")
-    
-    # Configure SocketIO to allow specific origins
+    # Configure SocketIO to allow all origins with credentials
     logger.info("🔌 Configuring SocketIO...")
     socketio.init_app(app, 
-                     cors_allowed_origins=allowed_origins,  # Use specific origins
-                     cors_credentials=True,                 # Enable credentials with specific origins
+                     cors_allowed_origins="*",                  # Allow all origins
+                     cors_credentials=True,                     # Enable credentials (manual CORS handling)
                      async_mode=app.config.get('SOCKETIO_ASYNC_MODE', 'threading'),
                      logger=True,   # Enable logging for debugging
                      engineio_logger=True,  # Enable engine.io logging
@@ -117,6 +101,25 @@ def create_app(config_name=None):
     def api_health_check():
         return {'status': 'healthy', 'service': 'skribbl-clone-backend', 'api': 'working'}
     
+    # Handle preflight OPTIONS requests
+    @app.before_request
+    def handle_preflight():
+        if request.method == "OPTIONS":
+            logger.info(f"🔄 Handling preflight request for {request.path}")
+            origin = request.headers.get('Origin')
+            response = make_response()
+            if origin:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                response.headers['Vary'] = 'Origin'
+            else:
+                response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-Session-ID'
+            response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
+            response.headers['Access-Control-Max-Age'] = '3600'
+            logger.info(f"✅ Preflight request handled for origin: {origin}")
+            return response
+
     # Add comprehensive CORS headers for all responses
     @app.after_request
     def after_request(response):
@@ -126,17 +129,19 @@ def create_app(config_name=None):
         origin = request.headers.get('Origin')
         logger.info(f"🌐 Request origin: {origin}")
         
-        # Check if the origin is in our allowed list
-        if origin in allowed_origins:
-            response.headers.add('Access-Control-Allow-Origin', origin)
-            response.headers.add('Access-Control-Allow-Credentials', 'true')
-            logger.info(f"✅ CORS allowed for origin: {origin}")
+        # Manually add CORS headers to ensure they work with any origin
+        if origin:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Vary'] = 'Origin'  # Important for caching
         else:
-            logger.warning(f"❌ CORS blocked for origin: {origin}")
-            logger.info(f"🔍 Allowed origins: {allowed_origins}")
+            response.headers['Access-Control-Allow-Origin'] = '*'
         
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-Session-ID'
+        response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
+        
+        logger.info(f"✅ CORS headers manually added for origin: {origin}")
+        
         return response
     
     return app 

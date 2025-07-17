@@ -1,3 +1,4 @@
+# Backend Application Configuration
 import os
 from dotenv import load_dotenv
 
@@ -21,6 +22,25 @@ class Config:
     WORD_SELECTION_TIME = int(os.environ.get('WORD_SELECTION_TIME') or 10)
     DRAWING_TIME = int(os.environ.get('DRAWING_TIME') or 80)
     RESULT_DISPLAY_TIME = int(os.environ.get('RESULT_DISPLAY_TIME') or 5)
+
+# Game Configuration Constants
+class GameConfig:
+    # Default Game Settings
+    DEFAULT_ROUNDS = 3
+    DEFAULT_DRAW_TIME = 80
+    DEFAULT_MAX_PLAYERS = 8
+    DEFAULT_WORD_DIFFICULTY = 'medium'
+    
+    # Game Limits
+    MIN_PLAYERS = 2
+    MAX_PLAYERS = 12
+    MIN_ROUNDS = 1
+    MAX_ROUNDS = 10
+    MIN_DRAW_TIME = 30
+    MAX_DRAW_TIME = 300  # Backend allows higher than frontend
+    
+    # Valid Options
+    WORD_DIFFICULTIES = ['easy', 'medium', 'hard']
 
 class DevelopmentConfig(Config):
     DEBUG = True

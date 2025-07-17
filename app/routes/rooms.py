@@ -3,6 +3,7 @@ import string
 from flask import Blueprint, request, jsonify, session
 from app.services.memory_service import memory_service
 from app import socketio
+from app.config import GameConfig
 
 rooms_bp = Blueprint('rooms', __name__)
 
@@ -20,14 +21,26 @@ def create_room():
     try:
         logger.info(f"Request headers: {dict(request.headers)}")
         logger.info(f"Request origin: {request.headers.get('Origin')}")
+        logger.info(f"Request cookies: {dict(request.cookies)}")
         logger.info(f"Session data: {dict(session)}")
+        logger.info(f"Session ID: {session.sid if hasattr(session, 'sid') else 'No SID'}")
         
-        # Check if user is authenticated
+        # Check if user is authenticated (try multiple methods)
         user_id = session.get('user_id')
-        logger.info(f"User ID from session: {user_id}")
+        logger.info(f"User ID from Flask session: {user_id}")
+        
+        # If no user_id in Flask session, try custom cookie
+        if not user_id:
+            user_id = request.cookies.get('skribly_session_id')
+            logger.info(f"User ID from custom cookie: {user_id}")
+        
+        # If still no user_id, try custom header (for cross-origin compatibility)
+        if not user_id:
+            user_id = request.headers.get('X-Session-ID')
+            logger.info(f"User ID from custom header: {user_id}")
         
         if not user_id:
-            logger.warning("No user ID in session - user not authenticated")
+            logger.warning("No user ID found in session, cookies, or headers - user not authenticated")
             return jsonify({'error': 'Authentication required. Please create a username first.'}), 401
         
         user_data = memory_service.get_user_session(user_id)
@@ -44,26 +57,30 @@ def create_room():
         while memory_service.get_room(room_id):  # Ensure uniqueness
             room_id = generate_room_id()
         
-        # Parse room settings
-        settings = {
-            'rounds': data.get('rounds', 3),
-            'draw_time': data.get('draw_time', 80),
-            'word_difficulty': data.get('word_difficulty', 'medium'),
-            'max_players': data.get('max_players', 8)
-        }
+        # Parse room settings with proper type conversion
+        try:
+            settings = {
+                'rounds': int(data.get('rounds', GameConfig.DEFAULT_ROUNDS)),
+                'draw_time': int(data.get('draw_time', GameConfig.DEFAULT_DRAW_TIME)),
+                'word_difficulty': data.get('word_difficulty', GameConfig.DEFAULT_WORD_DIFFICULTY),
+                'max_players': int(data.get('max_players', GameConfig.DEFAULT_MAX_PLAYERS))
+            }
+        except (ValueError, TypeError) as e:
+            logger.error(f"Invalid setting values: {e}")
+            return jsonify({'error': 'Invalid setting values provided'}), 400
         
         # Validate settings
-        if not (1 <= settings['rounds'] <= 10):
-            return jsonify({'error': 'Rounds must be between 1 and 10'}), 400
+        if not (GameConfig.MIN_ROUNDS <= settings['rounds'] <= GameConfig.MAX_ROUNDS):
+            return jsonify({'error': f'Rounds must be between {GameConfig.MIN_ROUNDS} and {GameConfig.MAX_ROUNDS}'}), 400
         
-        if not (30 <= settings['draw_time'] <= 300):
-            return jsonify({'error': 'Draw time must be between 30 and 300 seconds'}), 400
+        if not (GameConfig.MIN_DRAW_TIME <= settings['draw_time'] <= GameConfig.MAX_DRAW_TIME):
+            return jsonify({'error': f'Draw time must be between {GameConfig.MIN_DRAW_TIME} and {GameConfig.MAX_DRAW_TIME} seconds'}), 400
         
-        if settings['word_difficulty'] not in ['easy', 'medium', 'hard']:
+        if settings['word_difficulty'] not in GameConfig.WORD_DIFFICULTIES:
             return jsonify({'error': 'Invalid word difficulty'}), 400
         
-        if not (2 <= settings['max_players'] <= 12):
-            return jsonify({'error': 'Max players must be between 2 and 12'}), 400
+        if not (GameConfig.MIN_PLAYERS <= settings['max_players'] <= GameConfig.MAX_PLAYERS):
+            return jsonify({'error': f'Max players must be between {GameConfig.MIN_PLAYERS} and {GameConfig.MAX_PLAYERS}'}), 400
         
         # Create room
         room_name = data.get('name', f"{user_data['username']}'s Room")
@@ -110,13 +127,24 @@ def join_room(room_id):
     logger.info(f"=== JOIN ROOM REQUEST: {room_id} ===")
     
     try:
-        # Check if user is authenticated
+        # Check if user is authenticated (try multiple methods)
         user_id = session.get('user_id')
-        logger.info(f"User ID from session: {user_id}")
+        logger.info(f"User ID from Flask session: {user_id}")
+        
+        # If no user_id in Flask session, try custom cookie
+        if not user_id:
+            user_id = request.cookies.get('skribly_session_id')
+            logger.info(f"User ID from custom cookie: {user_id}")
+        
+        # If still no user_id, try custom header (for cross-origin compatibility)
+        if not user_id:
+            user_id = request.headers.get('X-Session-ID')
+            logger.info(f"User ID from custom header: {user_id}")
+        
         logger.info(f"Full session data: {dict(session)}")
         
         if not user_id:
-            logger.warning("No user ID in session - user not authenticated")
+            logger.warning("No user ID found in session, cookies, or headers - user not authenticated")
             return jsonify({
                 'error': 'Authentication required. Please create a username first.',
                 'code': 'NOT_AUTHENTICATED'

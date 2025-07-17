@@ -1,5 +1,6 @@
 import threading
 from datetime import datetime
+from app.config import GameConfig
 
 class MemoryService:
     def __init__(self):
@@ -19,10 +20,10 @@ class MemoryService:
         with self._lock:
             if settings is None:
                 settings = {
-                    'rounds': 3,
-                    'draw_time': 80,
-                    'word_difficulty': 'medium',
-                    'max_players': 8
+                    'rounds': GameConfig.DEFAULT_ROUNDS,
+                    'draw_time': GameConfig.DEFAULT_DRAW_TIME,
+                    'word_difficulty': GameConfig.DEFAULT_WORD_DIFFICULTY,
+                    'max_players': GameConfig.DEFAULT_MAX_PLAYERS
                 }
             
             room_data = {
@@ -30,7 +31,7 @@ class MemoryService:
                 'host': host_id,
                 'name': name,
                 'players': [host_id],
-                'max_players': 8,
+                'max_players': settings['max_players'],
                 'status': 'waiting',
                 'settings': settings,
                 'game_state': {
