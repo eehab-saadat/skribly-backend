@@ -10,7 +10,7 @@ class Config:
     
     # CORS configuration - include ngrok URLs by default
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', 
-        'https://skribly.netlify.app,https://immortal-allowed-bulldog.ngrok-free.app,https://heron-ruling-deadly.ngrok-free.app,http://localhost:3000,http://127.0.0.1:3000').split(',')
+        'https://skribly.netlify.app,https://skribly-frontend.onrender.com,https://skribly-backend.onrender.com,https://immortal-allowed-bulldog.ngrok-free.app,https://heron-ruling-deadly.ngrok-free.app,http://localhost:3000,http://127.0.0.1:3000').split(',')
     
     # Server configuration
     HOST = os.environ.get('HOST') or '127.0.0.1'

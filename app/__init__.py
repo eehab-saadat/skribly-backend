@@ -51,9 +51,11 @@ def create_app(config_name=None):
     # Retrieve allowed origins from application config (Config.CORS_ORIGINS)
     socketio_allowed_origins = app.config.get('CORS_ORIGINS', [])
 
-    # Ensure our Netlify production domain is included
+    # Ensure our Netlify and Render production domains are included
     if 'https://skribly.netlify.app' not in socketio_allowed_origins:
         socketio_allowed_origins.append('https://skribly.netlify.app')
+    if 'https://skribly-frontend.onrender.com' not in socketio_allowed_origins:
+        socketio_allowed_origins.append('https://skribly-frontend.onrender.com')
 
     logger.info(f"🔌 Socket.IO allowed origins: {socketio_allowed_origins}")
 
@@ -65,9 +67,9 @@ def create_app(config_name=None):
                      engineio_logger=True,  # Enable engine.io logging
                      ping_timeout=60,       # Optimize for ngrok
                      ping_interval=25,      # Optimize for ngrok
-                     transports=['polling', 'websocket'], # Allow both transports for ngrok
-                     manage_session=False,  # Use Flask's session management
-                     allow_upgrades=True,   # Enable WebSocket upgrades for better ngrok performance
+                     transports=['polling'],                # PythonAnywhere: WebSockets unsupported → polling only
+                     manage_session=False,                  # Use Flask's session management
+                     allow_upgrades=False,                  # Disable upgrade attempts that trigger 500 errors
                      cookie=None)           # Disable cookies for CORS compatibility
     logger.info("✅ SocketIO configured successfully with explicit origins list")
     
@@ -134,6 +136,8 @@ def create_app(config_name=None):
             allowed_origins = app.config.get('CORS_ORIGINS', [])
             if 'https://skribly.netlify.app' not in allowed_origins:
                 allowed_origins.append('https://skribly.netlify.app')
+            if 'https://skribly-frontend.onrender.com' not in allowed_origins:
+                allowed_origins.append('https://skribly-frontend.onrender.com')
             
             response = make_response()
             
@@ -176,6 +180,8 @@ def create_app(config_name=None):
         allowed_origins = app.config.get('CORS_ORIGINS', [])
         if 'https://skribly.netlify.app' not in allowed_origins:
             allowed_origins.append('https://skribly.netlify.app')
+        if 'https://skribly-frontend.onrender.com' not in allowed_origins:
+            allowed_origins.append('https://skribly-frontend.onrender.com')
         
         # Set CORS headers - never use wildcard with credentials
         if origin and (origin in allowed_origins or 
