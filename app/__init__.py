@@ -47,19 +47,34 @@ def create_app(config_name=None):
     
     # Configure SocketIO to allow all origins with credentials
     logger.info("🔌 Configuring SocketIO...")
+    
+
+    
+    # Define explicit allowed origins for Socket.IO (no wildcards allowed)
+    socketio_allowed_origins = [
+        'https://immortal-allowed-bulldog.ngrok-free.app',
+        'https://heron-ruling-deadly.ngrok-free.app',
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:5000',
+        'http://127.0.0.1:5000'
+    ]
+    
+    logger.info(f"🔌 Socket.IO allowed origins: {socketio_allowed_origins}")
+    
     socketio.init_app(app, 
-                     cors_allowed_origins="*",                  # Allow all origins
-                     cors_credentials=True,                     # Enable credentials (manual CORS handling)
+                     cors_allowed_origins=socketio_allowed_origins,  # Use explicit list instead of function
+                     cors_credentials=True,                          # Enable credentials
                      async_mode=app.config.get('SOCKETIO_ASYNC_MODE', 'threading'),
                      logger=True,   # Enable logging for debugging
                      engineio_logger=True,  # Enable engine.io logging
-                     ping_timeout=120,      # Increase timeout for PythonAnywhere
-                     ping_interval=60,      # Increase ping interval
-                     transports=['polling'], # Only use polling for PythonAnywhere
+                     ping_timeout=60,       # Optimize for ngrok
+                     ping_interval=25,      # Optimize for ngrok
+                     transports=['polling', 'websocket'], # Allow both transports for ngrok
                      manage_session=False,  # Use Flask's session management
-                     allow_upgrades=False,  # Disable WebSocket upgrades for PythonAnywhere
+                     allow_upgrades=True,   # Enable WebSocket upgrades for better ngrok performance
                      cookie=None)           # Disable cookies for CORS compatibility
-    logger.info("✅ SocketIO configured successfully")
+    logger.info("✅ SocketIO configured successfully with explicit origins list")
     
     # Register blueprints
     logger.info("📚 Registering blueprints...")
@@ -95,11 +110,23 @@ def create_app(config_name=None):
     
     @app.route('/health')
     def health_check():
-        return {'status': 'healthy', 'service': 'skribbl-clone-backend'}
+        from flask import jsonify
+        response = jsonify({'status': 'healthy', 'service': 'skribbl-clone-backend'})
+        response.headers['Content-Type'] = 'application/json'
+        return response
     
     @app.route('/api/health')
     def api_health_check():
-        return {'status': 'healthy', 'service': 'skribbl-clone-backend', 'api': 'working'}
+        from flask import jsonify
+        response = jsonify({
+            'status': 'healthy', 
+            'service': 'skribbl-clone-backend', 
+            'api': 'working',
+            'cors_configured': True,
+            'socket_available': True
+        })
+        response.headers['Content-Type'] = 'application/json'
+        return response
     
     # Handle preflight OPTIONS requests
     @app.before_request
@@ -107,14 +134,40 @@ def create_app(config_name=None):
         if request.method == "OPTIONS":
             logger.info(f"🔄 Handling preflight request for {request.path}")
             origin = request.headers.get('Origin')
+            
+            # Define allowed origins
+            allowed_origins = [
+                'https://immortal-allowed-bulldog.ngrok-free.app',
+                'https://heron-ruling-deadly.ngrok-free.app',
+                'http://localhost:3000',
+                'http://127.0.0.1:3000',
+                'http://localhost:5000',
+                'http://127.0.0.1:5000'
+            ]
+            
             response = make_response()
-            if origin:
+            
+            # Never use wildcard with credentials - always specify exact origin
+            if origin and (origin in allowed_origins or 
+                          '.ngrok-free.app' in origin or 
+                          '.ngrok.app' in origin or 
+                          '.ngrok.io' in origin or
+                          origin.startswith('http://localhost:') or 
+                          origin.startswith('http://127.0.0.1:')):
                 response.headers['Access-Control-Allow-Origin'] = origin
                 response.headers['Access-Control-Allow-Credentials'] = 'true'
-                response.headers['Vary'] = 'Origin'
+                logger.info(f"✅ Preflight origin allowed: {origin}")
+            elif origin:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                logger.info(f"⚠️ Preflight origin allowed (fallback): {origin}")
             else:
-                response.headers['Access-Control-Allow-Origin'] = '*'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-Session-ID'
+                # No origin - this shouldn't happen with modern browsers
+                logger.warning("❌ Preflight request without origin header")
+                return response
+                
+            response.headers['Vary'] = 'Origin'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-Session-ID,ngrok-skip-browser-warning,User-Agent'
             response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
             response.headers['Access-Control-Max-Age'] = '3600'
             logger.info(f"✅ Preflight request handled for origin: {origin}")
@@ -129,15 +182,36 @@ def create_app(config_name=None):
         origin = request.headers.get('Origin')
         logger.info(f"🌐 Request origin: {origin}")
         
-        # Manually add CORS headers to ensure they work with any origin
-        if origin:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Vary'] = 'Origin'  # Important for caching
-        else:
-            response.headers['Access-Control-Allow-Origin'] = '*'
+        # Define allowed origins
+        allowed_origins = [
+            'https://immortal-allowed-bulldog.ngrok-free.app',
+            'https://heron-ruling-deadly.ngrok-free.app',
+            'http://localhost:3000',
+            'http://127.0.0.1:3000',
+            'http://localhost:5000',
+            'http://127.0.0.1:5000'
+        ]
         
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-Session-ID'
+        # Set CORS headers - never use wildcard with credentials
+        if origin and (origin in allowed_origins or 
+                      '.ngrok-free.app' in origin or 
+                      '.ngrok.app' in origin or 
+                      '.ngrok.io' in origin or
+                      origin.startswith('http://localhost:') or 
+                      origin.startswith('http://127.0.0.1:')):
+            response.headers['Access-Control-Allow-Origin'] = origin
+            logger.info(f"✅ CORS origin allowed: {origin}")
+        elif origin:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            logger.info(f"⚠️ CORS origin allowed (fallback): {origin}")
+        else:
+            # No origin header - don't set CORS headers
+            logger.info("ℹ️ No origin header, skipping CORS")
+            return response
+            
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Vary'] = 'Origin'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-Session-ID,ngrok-skip-browser-warning,User-Agent'
         response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
         
         logger.info(f"✅ CORS headers manually added for origin: {origin}")

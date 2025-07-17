@@ -8,8 +8,9 @@ class Config:
     # Flask configuration
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'skribbl-clone-dev-secret-key-123456789'
     
-    # CORS configuration
-    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000').split(',')
+    # CORS configuration - include ngrok URLs by default
+    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', 
+        'https://skribly.netlify.app,https://immortal-allowed-bulldog.ngrok-free.app,https://heron-ruling-deadly.ngrok-free.app,http://localhost:3000,http://127.0.0.1:3000').split(',')
     
     # Server configuration
     HOST = os.environ.get('HOST') or '127.0.0.1'
