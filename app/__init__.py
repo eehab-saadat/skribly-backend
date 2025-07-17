@@ -48,22 +48,17 @@ def create_app(config_name=None):
     # Configure SocketIO to allow all origins with credentials
     logger.info("🔌 Configuring SocketIO...")
     
+    # Retrieve allowed origins from application config (Config.CORS_ORIGINS)
+    socketio_allowed_origins = app.config.get('CORS_ORIGINS', [])
 
-    
-    # Define explicit allowed origins for Socket.IO (no wildcards allowed)
-    socketio_allowed_origins = [
-        'https://immortal-allowed-bulldog.ngrok-free.app',
-        'https://heron-ruling-deadly.ngrok-free.app',
-        'http://localhost:3000',
-        'http://127.0.0.1:3000',
-        'http://localhost:5000',
-        'http://127.0.0.1:5000'
-    ]
-    
+    # Ensure our Netlify production domain is included
+    if 'https://skribly.netlify.app' not in socketio_allowed_origins:
+        socketio_allowed_origins.append('https://skribly.netlify.app')
+
     logger.info(f"🔌 Socket.IO allowed origins: {socketio_allowed_origins}")
-    
+
     socketio.init_app(app, 
-                     cors_allowed_origins=socketio_allowed_origins,  # Use explicit list instead of function
+                     cors_allowed_origins=socketio_allowed_origins,  # Use list from config
                      cors_credentials=True,                          # Enable credentials
                      async_mode=app.config.get('SOCKETIO_ASYNC_MODE', 'threading'),
                      logger=True,   # Enable logging for debugging
@@ -135,15 +130,10 @@ def create_app(config_name=None):
             logger.info(f"🔄 Handling preflight request for {request.path}")
             origin = request.headers.get('Origin')
             
-            # Define allowed origins
-            allowed_origins = [
-                'https://immortal-allowed-bulldog.ngrok-free.app',
-                'https://heron-ruling-deadly.ngrok-free.app',
-                'http://localhost:3000',
-                'http://127.0.0.1:3000',
-                'http://localhost:5000',
-                'http://127.0.0.1:5000'
-            ]
+            # Allowed origins sourced from configuration
+            allowed_origins = app.config.get('CORS_ORIGINS', [])
+            if 'https://skribly.netlify.app' not in allowed_origins:
+                allowed_origins.append('https://skribly.netlify.app')
             
             response = make_response()
             
@@ -182,15 +172,10 @@ def create_app(config_name=None):
         origin = request.headers.get('Origin')
         logger.info(f"🌐 Request origin: {origin}")
         
-        # Define allowed origins
-        allowed_origins = [
-            'https://immortal-allowed-bulldog.ngrok-free.app',
-            'https://heron-ruling-deadly.ngrok-free.app',
-            'http://localhost:3000',
-            'http://127.0.0.1:3000',
-            'http://localhost:5000',
-            'http://127.0.0.1:5000'
-        ]
+        # Allowed origins sourced from configuration
+        allowed_origins = app.config.get('CORS_ORIGINS', [])
+        if 'https://skribly.netlify.app' not in allowed_origins:
+            allowed_origins.append('https://skribly.netlify.app')
         
         # Set CORS headers - never use wildcard with credentials
         if origin and (origin in allowed_origins or 
